@@ -1,45 +1,44 @@
 # 🎟️ ProofPass Smart Contracts
 
-A blockchain-based **event attendance and verification system** built on **Base** for **fast**, **secure**, and **profitable** on-chain event management.
+A blockchain-based event attendance and verification system built on **Stellar** using **Soroban** smart contracts for fast, low-cost, and profitable on-chain event management.
 
 ---
 
 ## 🏗️ Architecture
 
-The **ProofPass** smart contract suite powers the event lifecycle from creation to check-in and settlement.
+The ProofPass Soroban smart contract suite powers the event lifecycle from creation to check-in and settlement.
 
 ### Core Components
-- **Event Registry** — Create, manage, and track events on-chain  
-- **Ticketing System** — Mint and manage event passes (ERC-721 / ERC-1155)  
-- **Check-in System** — Verify attendee presence with wallet signature or QR scan  
-- **Revenue Splitter** — Distribute payments between platform and organizer  
-- **Verification Layer** — Immutable record of attendance stored on Base  
-- **Future Analytics** — Attendance insights and engagement statistics  
+
+- **Event Registry** — Create, manage, and track events on-chain
+- **Ticketing System** — Mint and manage event passes as Stellar assets
+- **Check-in System** — Verify attendee presence with Stellar account signature or QR scan
+- **Revenue Splitter** — Distribute XLM payments between platform and organizer
+- **Verification Layer** — Immutable record of attendance stored on Stellar
+- **Future Analytics** — Attendance insights and engagement statistics
 
 ---
 
 ## 📋 Contract Details
 
 ### Network Information
-- **Blockchain:** Base Sepolia Testnet  
-- **Contract Addresses:** `{
-  - "eventRegistry": "0x716c9b4973a08Cb6340C048e52fdbA6893F2DA25",
-  - "attendanceVerifier": "0x55Aaed643EE739eEDf5B6f5F524Ecc7c57b674E5",
-}` 
-- **Block Explorer:** [BaseScan (Testnet)](https://sepolia.basescan.org/)  
-- **Network RPC:** `https://sepolia.base.org`  
-- **Chain ID:** 84532  
 
----
+- **Blockchain:** Stellar Testnet
+- **Contract ID:** `CXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX` *(replace with deployed contract ID)*
+- **Block Explorer:** [Stellar Expert (Testnet)](https://stellar.expert/explorer/testnet)
+- **Network RPC:** [https://soroban-testnet.stellar.org](https://soroban-testnet.stellar.org)
+- **Horizon URL:** [https://horizon-testnet.stellar.org](https://horizon-testnet.stellar.org)
+- **Network Passphrase:** `Test SDF Network ; September 2015`
 
 ### Contract Features
-- ✅ Event creation and on-chain metadata storage  
-- ✅ Ticket minting and purchase tracking  
-- ✅ Secure attendee check-in (QR or signature-based)  
-- ✅ Automatic revenue split for organizers and platform  
-- ✅ Role-based access control (Owner / Organizer / Attendee)  
-- ✅ Event emission for frontend integration  
-- ✅ Gas-optimized Solidity 0.8+ implementation  
+
+- Event creation and on-chain metadata storage
+- Ticket minting and XLM purchase tracking
+- Secure attendee check-in (QR or Stellar signature-based)
+- Automatic revenue split for organizers and platform
+- Role-based access control (Owner / Organizer / Attendee)
+- Event emission for frontend integration
+- Fee-optimized Rust/Soroban implementation
 
 ---
 
@@ -49,137 +48,154 @@ The **ProofPass** smart contract suite powers the event lifecycle from creation 
 
 ```bash
 # Node.js and npm
-node --version   # v18.0.0 or higher
-npm --version    # v8.0.0 or higher
+node --version  # v18.0.0 or higher
+npm --version   # v8.0.0 or higher
+
+# Rust (for compiling Soroban contracts)
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+rustup target add wasm32-unknown-unknown
+
+# Stellar CLI
+cargo install --locked stellar-cli --features opt
 ```
 
-# Development tools
+### Installation
+
 ```bash
-npm install -g hardhat
-```
-
-Installation
 # Clone the repository
-```bash
-git clone https://github.com/phertyameen/proofpass
-cd proofpass/contracts
-```
+git clone https://github.com/ProofPass-HQ/proofpass
+cd proofpass/contract
 
 # Install dependencies
-```bash
 npm install
-```
 
 # Copy environment variables
-- cp .env.example .env
+cp .env.example .env
+```
 
-- Environment Configuration
+### Environment Configuration
 
-- Create a .env file with the following variables:
+Create a `.env` file with the following variables:
 
-# Base Sepolia Configuration
-- BASE_SEPOLIA_RPC_URL=https://sepolia.base.org
-- PRIVATE_KEY=your_private_key_here
+```bash
+# Stellar Network Configuration
+STELLAR_NETWORK=testnet
+STELLAR_RPC_URL=https://soroban-testnet.stellar.org
+STELLAR_HORIZON_URL=https://horizon-testnet.stellar.org
 
-# Network Configuration
-- CHAIN_ID=84532
-- BLOCK_CONFIRMATIONS=5
+# Account Configuration
+SECRET_KEY=your_deployer_secret_key_here
+NETWORK_PASSPHRASE=Test SDF Network ; September 2015
+```
+
+---
 
 ## 🔧 Development
-Compiling Contracts
 
-# Compile smart contracts
-npx hardhat compile
+### Compiling Contracts
 
-# Clean and recompile
 ```bash
-npx hardhat clean && npx hardhat compile
+# Build the Soroban contract
+stellar contract build
+
+# Or using cargo
+cargo build --target wasm32-unknown-unknown --release
 ```
 
-Testing
+### Testing
+
+```bash
 # Run all tests
-```bash
-npm test
+cargo test
 ```
 
-Deployment
-# Deploy to Base Sepolia
+### Deployment
+
 ```bash
-npx hardhat run scripts/deploy.js --network base-sepolia
+# Deploy to Stellar Testnet
+stellar contract deploy \
+  --wasm target/wasm32-unknown-unknown/release/proofpass.wasm \
+  --source <your-secret-key> \
+  --network testnet
+
+# Initialize the contract
+stellar contract invoke \
+  --id <CONTRACT_ID> \
+  --source <your-secret-key> \
+  --network testnet \
+  -- initialize --admin <admin-address>
 ```
 
-# Verify contract on BaseScan
-```bash
-npx hardhat verify --network base-sepolia <contract_address>
-```
+---
 
 ## 📚 Contract API
-Core Functions
-Event Management
 
-- createEvent(string name, uint256 price, uint256 capacity, bool sponsorMode)
-Creates a new event with defined capacity, price, and sponsorship mode.
+### Core Functions — Event Management
 
-- buyTicket(uint256 eventId)
-Allows attendees to buy event tickets; funds go to escrow until settlement.
+**`create_event(name: String, price: i128, capacity: u32, sponsor_mode: bool)`**
+Creates a new event with defined capacity, price in stroops (XLM), and sponsorship mode.
 
-- sponsorGuest(uint256 eventId, address attendee)
+**`buy_ticket(event_id: u64)`**
+Allows attendees to buy event tickets; XLM funds go to escrow until settlement.
+
+**`sponsor_guest(event_id: u64, attendee: Address)`**
 Organizer pre-pays for guests (sponsored entry).
 
-- checkIn(uint256 eventId, address attendee)
-Marks attendance and emits an AttendeeCheckedIn event.
+**`check_in(event_id: u64, attendee: Address)`**
+Marks attendance and emits an `AttendeeCheckedIn` event.
 
-- settleEvent(uint256 eventId)
-Distributes funds between organizer and platform.
+**`settle_event(event_id: u64)`**
+Distributes XLM funds between organizer and platform.
+
+---
 
 ## 🔗 Useful Links
 
-- Base Faucet: https://faucet.base.org
+- **Stellar Testnet Friendbot:** [https://friendbot.stellar.org](https://friendbot.stellar.org)
+- **Stellar Expert Explorer:** [https://stellar.expert](https://stellar.expert)
+- **Soroban Docs:** [https://developers.stellar.org/docs/smart-contracts](https://developers.stellar.org/docs/smart-contracts)
+- **Stellar Docs:** [https://developers.stellar.org](https://developers.stellar.org)
+- **Stellar CLI Docs:** [https://developers.stellar.org/docs/tools/developer-tools/cli/stellar-cli](https://developers.stellar.org/docs/tools/developer-tools/cli/stellar-cli)
 
-- Base Bridge: https://bridge.base.org
+---
 
-- Docs: https://docs.base.org
+## 📊 Fee Estimation
 
-- Status: https://status.base.org
+| Function | Soroban Fee (approx.) | USD Cost* |
+|---|---|---|
+| Create Event | ~0.1 XLM | ~$0.01 |
+| Buy Ticket | ~0.05 XLM | ~$0.005 |
+| Check In | ~0.03 XLM | ~$0.003 |
+| Settle Event | ~0.05 XLM | ~$0.005 |
 
-## 📊 Gas Optimization
-Estimated Gas Costs (Base Sepolia)
-Function	Gas (approx.)	USD Cost*
-Create Event	130,000	$0.008
-Buy Ticket	90,000	$0.006
-Check In	60,000	$0.004
-Settle Event	70,000	$0.005
+*Costs are estimated based on Stellar network conditions and current XLM price.*
 
-🤝 Contributing
-Workflow
+---
 
-Fork the repository
+## 🤝 Contributing Workflow
 
-Create a new branch (git checkout -b feature/amazing-feature)
+1. Fork the repository
+2. Create a new branch (`git checkout -b feature/amazing-feature`)
+3. Write tests for your feature
+4. Implement your changes
+5. Run tests (`cargo test`)
+6. Commit and push (`git commit -m 'Add amazing feature'`)
+7. Open a Pull Request
 
-Write tests for your feature
+---
 
-Implement your changes
+## 📄 License
 
-Run tests (npm test)
+This project is licensed under the **MIT License** — see the [LICENSE](LICENSE) file for details.
 
-Commit and push (git commit -m 'Add amazing feature')
+---
 
-Open a Pull Request
+## 🙏 Acknowledgments
 
-📄 License
+- **Stellar Development Foundation** — for a developer-friendly and energy-efficient blockchain
+- **Soroban** — for the Rust-based smart contract platform
+- **Stellar Community** — for resources, feedback, and support
 
-This project is licensed under the MIT License — see the LICENSE
- file for details.
+---
 
-🙏 Acknowledgments
-
-Base — for an efficient and developer-friendly L2 environment
-
-OpenZeppelin — for secure and audited smart contract libraries
-
-Hardhat — for an excellent local development & deployment experience
-
-Base Builders Community — for resources, feedback, and support
-
-**Built with ❤️ on Base** | **Revolutionizing event attendance with on-chain trust and rewards. **
+Built with ❤️ on Stellar | **Revolutionizing event attendance with on-chain trust and rewards.**
