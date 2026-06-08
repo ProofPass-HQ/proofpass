@@ -1,8 +1,8 @@
-# 🎟️ ProofPass — Blockchain-Powered Event Attendance & Revenue Platform
+# 🎟️ ProofPass - Blockchain-Powered Event Attendance & Revenue Platform
 
 > On-chain event attendance verification built on Stellar and Soroban.
 
-**Status:** Early development — smart contracts in progress, frontend scaffold live.
+**Status:** Early development - smart contracts in progress, frontend scaffold live.
 
 Live app: [proofpass-pi.vercel.app](https://proofpass-pi.vercel.app)
 
@@ -20,13 +20,13 @@ ProofPass lets event organizers create verifiable attendance records on Stellar.
 **For attendees**
 - Check in via Freighter wallet signature or QR scan
 - Build a verifiable on-chain attendance history
-- No fake check-ins — every record requires a real wallet signature
+- No fake check-ins - every record requires a real wallet signature
 
 ---
 
 ## Why Stellar
 
-Most event platforms store attendance in a private database. That record can be deleted, altered, or lost. Stellar's finality model means a check-in transaction, once confirmed, cannot be reversed or edited. Soroban's low fees (fractions of a cent per transaction) make per-attendee on-chain records economically viable at any event size — something impractical on higher-fee chains.
+Most event platforms store attendance in a private database. That record can be deleted, altered, or lost. Stellar's finality model means a check-in transaction, once confirmed, cannot be reversed or edited. Soroban's low fees (fractions of a cent per transaction) make per-attendee on-chain records economically viable at any event size - something impractical on higher-fee chains.
 
 ---
 
@@ -36,7 +36,7 @@ Most event platforms store attendance in a private database. That record can be 
 |---|---|
 | Frontend | Next.js 15, TypeScript, Tailwind CSS v4, shadcn/ui |
 | Blockchain | Stellar (testnet / mainnet) |
-| Smart contracts | Soroban (Rust) — in progress |
+| Smart contracts | Soroban (Rust) - in progress |
 | Wallet | Freighter |
 
 ---
@@ -84,4 +84,4 @@ Issues and PRs are open. If you're building on Stellar or Soroban and want to co
 
 ## License
 
-MIT — see [LICENSE](LICEN
+MIT - see [LICENSE](LICENSE).
