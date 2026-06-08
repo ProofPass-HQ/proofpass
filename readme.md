@@ -1,115 +1,87 @@
 # 🎟️ ProofPass — Blockchain-Powered Event Attendance & Revenue Platform
 
-![ProofPass Banner](image.png)
+> On-chain event attendance verification built on Stellar and Soroban.
 
-## 🌟 Overview
+**Status:** Early development — smart contracts in progress, frontend scaffold live.
 
-**ProofPass** is a **blockchain-based event attendance and verification platform** built on **Stellar**, designed to make check-ins **tamper-proof**, **transparent**, and **profitable**.
-
-Organizers can create events on-chain, issue paid or sponsored tickets, and track attendance with immutable blockchain records.
-Participants check in securely via wallet signature or QR scan — no fake attendees, no lost records, no manual tracking.
+Live app: [proofpass-pi.vercel.app](https://proofpass-pi.vercel.app)
 
 ---
 
-## 🎯 Problem & Solution
+## What it does
 
-### Problem
+ProofPass lets event organizers create verifiable attendance records on Stellar. When an attendee checks in, the event, the wallet, and the timestamp are recorded on-chain via a Soroban smart contract. The record is permanent, public, and requires no trust in a central database.
 
-- Event fraud — fake check-ins, proxy attendance, unverifiable records
-- Time wasted on manual attendance tracking
-- No revenue model for organizers — most tools ignore small events
+**For organizers**
+- Create an event on-chain in seconds
+- Track check-ins in real time
+- Export immutable attendance reports for compliance or proof of engagement
 
-### Solution
-
-- **Stellar smart contract verification** for trust
-- **Automated check-in & reporting**
-- **Revenue-sharing model** — organizers earn per attendee or sponsor guests
-- **Immutable event history** for transparency and compliance
-
----
-
-## 🏆 Features
-
-### For Organizers
-
-- Create events on Stellar for fractions of a cent in fees
-- Set ticket prices in XLM, define revenue splits, or sponsor guest check-ins
-- Track attendance in real-time
-- Generate downloadable reports
-
-### For Attendees
-
-- Secure wallet or QR-based check-in
-- View personal attendance history
-- Transparent proof of participation (NFT ticket optional via Stellar assets)
-
-### For Platforms & Institutions
-
-- Fraud prevention through Stellar blockchain verification
-- On-chain proof of engagement
-- Compliance-ready immutable records
+**For attendees**
+- Check in via Freighter wallet signature or QR scan
+- Build a verifiable on-chain attendance history
+- No fake check-ins — every record requires a real wallet signature
 
 ---
 
-## 🛠 Tech Stack
+## Why Stellar
 
-- **Next.js 15** (React Framework)
-- **TypeScript**
-- **Tailwind CSS v4** + **shadcn/ui**
-- **Stellar SDK (stellar-sdk)** — Blockchain interaction on Stellar Testnet / Mainnet
-- **Soroban Smart Contracts (Rust)** — Event Registry + Ticket Management
-- **Freighter Wallet** — Stellar-compatible browser wallet
+Most event platforms store attendance in a private database. That record can be deleted, altered, or lost. Stellar's finality model means a check-in transaction, once confirmed, cannot be reversed or edited. Soroban's low fees (fractions of a cent per transaction) make per-attendee on-chain records economically viable at any event size — something impractical on higher-fee chains.
 
 ---
 
-## 🚀 Getting Started
+## Tech stack
 
-### Prerequisites
+| Layer | Technology |
+|---|---|
+| Frontend | Next.js 15, TypeScript, Tailwind CSS v4, shadcn/ui |
+| Blockchain | Stellar (testnet / mainnet) |
+| Smart contracts | Soroban (Rust) — in progress |
+| Wallet | Freighter |
 
+---
+
+## Current state
+
+- [x] Frontend scaffold deployed
+- [x] Freighter wallet connection
+- [ ] Event registry Soroban contract
+- [ ] Ticket / check-in contract
+- [ ] Mainnet deployment
+- [ ] Organizer dashboard
+
+This project is in active early development. Smart contract code is not yet deployed.
+
+---
+
+## Getting started
+
+**Prerequisites**
 - Node.js 18+
-- npm or yarn
-- [Freighter Wallet](https://freighter.app) connected to **Stellar Testnet**
-
-### Setup
+- [Freighter Wallet](https://freighter.app) connected to Stellar Testnet
 
 ```bash
-# Clone the repo
 git clone https://github.com/ProofPass-HQ/proofpass
 cd proofpass
-
-# Install dependencies
 npm install
-
-# Run the development server
 npm run dev
 ```
 
----
-
-## 🔗 Useful Links
-
-- **Live App:** [https://proofpass-pi.vercel.app](https://proofpass-pi.vercel.app)
-- **Stellar Docs:** [https://developers.stellar.org](https://developers.stellar.org)
-- **Soroban Docs:** [https://developers.stellar.org/docs/smart-contracts](https://developers.stellar.org/docs/smart-contracts)
-- **Stellar Testnet Friendbot:** [https://friendbot.stellar.org](https://friendbot.stellar.org)
-- **Stellar Explorer:** [https://stellar.expert](https://stellar.expert)
+Open [http://localhost:3000](http://localhost:3000).
 
 ---
 
-## 🤝 Contributing
+## Contributing
 
-1. Fork the repository
-2. Create a new branch (`git checkout -b feature/amazing-feature`)
-3. Commit your changes (`git commit -m 'Add amazing feature'`)
-4. Push to the branch (`git push origin feature/amazing-feature`)
-5. Open a Pull Request
+Issues and PRs are open. If you're building on Stellar or Soroban and want to contribute to the contract layer, open an issue first to align on approach.
 
----
-
-## 📄 License
-
-This project is licensed under the **MIT License** — see the [LICENSE](LICENSE) file for details.
+1. Fork the repo
+2. Create a branch: `git checkout -b feature/your-feature`
+3. Commit and push
+4. Open a pull request
 
 ---
 
-Built with ❤️ on Stellar | **Revolutionizing event attendance with on-chain trust and rewards.**
+## License
+
+MIT — see [LICENSE](LICEN
