@@ -8,35 +8,23 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import {
-  Wallet,
-  LogOut,
-  User,
-  Settings,
-  Users,
-  UserCircle,
-} from "lucide-react";
+import { Wallet, LogOut, User, Settings, Users, UserCircle } from "lucide-react";
 import { useState, useEffect } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import { sdk } from "@farcaster/miniapp-sdk";
-import { useAccount, useDisconnect } from "wagmi";
-import { ConnectButton } from "@rainbow-me/rainbowkit";
+import { useWallet } from "@/providers/wallet-provider";
 import { getWalletFromFID } from "@/lib/api/getWalletFromFID";
 
 export function ConnectWalletButton() {
-  const [currentRole, setCurrentRole] = useState<
-    "organizer" | "attendee" | null
-  >(null);
+  const [currentRole, setCurrentRole] = useState<"organizer" | "attendee" | null>(null);
   const [isBaseApp, setIsBaseApp] = useState(false);
   const [fid, setFid] = useState<string | null>(null);
   const router = useRouter();
   const pathname = usePathname();
 
-  // Wagmi hooks for browser wallet
-  const { address, isConnected } = useAccount();
-  const { disconnect: disconnectWallet } = useDisconnect();
+  const { isConnected, publicKey, isFreighterInstalled, connect, disconnect } =
+    useWallet();
 
-  // Determine current role based on pathname
   useEffect(() => {
     if (pathname.includes("/dashboard/organizer")) {
       setCurrentRole("organizer");
@@ -47,16 +35,13 @@ export function ConnectWalletButton() {
     }
   }, [pathname]);
 
-  // Check if in Base app environment and get FID
   useEffect(() => {
-    // Check localStorage first
     const storedFid = localStorage.getItem("fid");
     if (storedFid) {
       setFid(storedFid);
       setIsBaseApp(true);
     }
 
-    // Then check SDK
     sdk.context
       .then((ctx) => {
         if (ctx?.user?.fid) {
@@ -67,89 +52,46 @@ export function ConnectWalletButton() {
         }
       })
       .catch(() => {
-        // Not in Base app, check if we have stored FID
-        if (!storedFid) {
-          setIsBaseApp(false);
-        }
+        if (!storedFid) setIsBaseApp(false);
       });
   }, []);
 
   useEffect(() => {
     async function fetchWallet() {
       if (!fid) return;
+      if (isConnected && publicKey) return;
 
-      if (isConnected && address) {
-        console.log("Browser wallet already connected, skipping FID fetch");
-        return;
-      }
-
-      // Check if we already have a wallet stored
       const storedWallet = localStorage.getItem("farcasterWallet");
       if (storedWallet) return;
 
-      // Fetch from Neynar
       const wallet = await getWalletFromFID(fid);
       if (wallet) {
         localStorage.setItem("walletAddress", wallet);
-        console.log("Fetched wallet from FID:", wallet);
-
+        localStorage.setItem("farcasterWallet", wallet);
         window.dispatchEvent(
-          new CustomEvent("farcasterWalletReady", {
-            detail: { wallet, fid },
-          })
+          new CustomEvent("farcasterWalletReady", { detail: { wallet, fid } })
         );
-      } else {
-        console.warn("No verified wallet found for this FID");
       }
     }
-
     fetchWallet();
-  }, [fid, isConnected, address]);
+  }, [fid, isConnected, publicKey]);
 
   useEffect(() => {
-    async function fetchWallet() {
-      if (!fid) return;
-
-      // ✅ Only fetch if no wallet is connected via browser
-      if (isConnected && address) {
-        console.log("Browser wallet already connected, skipping FID fetch");
-        return;
-      }
-
-      const storedWallet = localStorage.getItem("farcasterWallet");
-      if (storedWallet) return;
-
-      const wallet = await getWalletFromFID(fid);
-      if (wallet) {
-        localStorage.setItem("farcasterWallet", wallet); // Use different key
-        console.log("Fetched wallet from FID:", wallet);
-      }
-    }
-
-    fetchWallet();
-  }, [fid, isConnected, address]);
-
-  // Auto-redirect to role selection when wallet connects
-  useEffect(() => {
-    if (isConnected && address && !currentRole) {
-      // Store wallet address
-      localStorage.setItem("walletAddress", address);
-      // Only redirect if not already on a dashboard page
-      if (
-        !pathname.includes("/dashboard") &&
-        !pathname.includes("/select-role")
-      ) {
+    if (isConnected && publicKey && !currentRole) {
+      localStorage.setItem("walletAddress", publicKey);
+      if (!pathname.includes("/dashboard") && !pathname.includes("/select-role")) {
         router.push("/select-role");
       }
     }
-  }, [isConnected, address, currentRole, pathname, router]);
+  }, [isConnected, publicKey, currentRole, pathname, router]);
 
   const handleDisconnect = () => {
     localStorage.removeItem("fid");
     localStorage.removeItem("walletAddress");
+    localStorage.removeItem("farcasterWallet");
     setCurrentRole(null);
     setFid(null);
-    disconnectWallet();
+    disconnect();
     router.push("/");
   };
 
@@ -161,17 +103,15 @@ export function ConnectWalletButton() {
     }
   };
 
-  // Get display identifier
   const getIdentifier = () => {
     if (fid) return `FID: ${fid}`;
-    if (address) return `${address.slice(0, 6)}...${address.slice(-4)}`;
+    if (publicKey) return `${publicKey.slice(0, 6)}...${publicKey.slice(-4)}`;
     return null;
   };
 
   const identifier = getIdentifier();
 
-  // If connected (either via wallet or Farcaster), show user menu
-  if ((isConnected && address) || fid) {
+  if ((isConnected && publicKey) || fid) {
     return (
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
@@ -183,10 +123,7 @@ export function ConnectWalletButton() {
         <DropdownMenuContent align="end" className="w-56">
           {currentRole && (
             <>
-              <DropdownMenuItem
-                onClick={handleSwitchRole}
-                className="cursor-pointer"
-              >
+              <DropdownMenuItem onClick={handleSwitchRole} className="cursor-pointer">
                 {currentRole === "organizer" ? (
                   <>
                     <UserCircle className="w-4 h-4 mr-2" />
@@ -202,7 +139,6 @@ export function ConnectWalletButton() {
               <DropdownMenuSeparator />
             </>
           )}
-
           <DropdownMenuItem
             onClick={() => router.push("/settings")}
             className="cursor-pointer"
@@ -210,9 +146,7 @@ export function ConnectWalletButton() {
             <Settings className="w-4 h-4 mr-2" />
             Settings
           </DropdownMenuItem>
-
           <DropdownMenuSeparator />
-
           <DropdownMenuItem
             onClick={handleDisconnect}
             className="cursor-pointer text-red-600"
@@ -225,80 +159,16 @@ export function ConnectWalletButton() {
     );
   }
 
-  // For Base app users who haven't connected yet - this shouldn't normally show
-  // because FID is auto-detected, but keep as fallback
-  if (isBaseApp && !fid) {
-    return null; // Don't show anything, FID should be auto-detected
-  }
+  if (isBaseApp && !fid) return null;
 
-  // Default: Show RainbowKit connect button for regular browser users
   return (
-    <ConnectButton.Custom>
-      {({
-        account,
-        chain,
-        openAccountModal,
-        openChainModal,
-        openConnectModal,
-        mounted,
-      }) => {
-        const ready = mounted;
-        const connected = ready && account && chain;
-
-        return (
-          <div
-            {...(!ready && {
-              "aria-hidden": true,
-              style: {
-                opacity: 0,
-                pointerEvents: "none",
-                userSelect: "none",
-              },
-            })}
-          >
-            {(() => {
-              // 1. User is not connected
-              if (!connected) {
-                return (
-                  <Button
-                    onClick={openConnectModal}
-                    className="gradient-emerald-teal text-white hover:opacity-90 transition-opacity"
-                  >
-                    <Wallet className="w-4 h-4 mr-2" />
-                    Connect Wallet
-                  </Button>
-                );
-              }
-
-              // 2. User is on the wrong network
-              if (chain.unsupported) {
-                return (
-                  <Button
-                    onClick={openChainModal}
-                    variant="destructive"
-                    className="px-4 py-2 rounded-lg font-medium"
-                  >
-                    Wrong network
-                  </Button>
-                );
-              }
-
-              // 3. User is connected and on the right network
-              // This should be handled by the main conditional above,
-              // but kept for RainbowKit compatibility
-              return (
-                <button
-                  onClick={openAccountModal}
-                  className="px-4 py-2 rounded-lg font-medium text-white gradient-emerald-teal hover:opacity-90 transition shadow-md"
-                >
-                  {account.displayName}
-                  {account.displayBalance ? ` (${account.displayBalance})` : ""}
-                </button>
-              );
-            })()}
-          </div>
-        );
-      }}
-    </ConnectButton.Custom>
+    <Button
+      onClick={connect}
+      disabled={isFreighterInstalled === false}
+      className="gradient-emerald-teal text-white hover:opacity-90 transition-opacity"
+    >
+      <Wallet className="w-4 h-4 mr-2" />
+      {isFreighterInstalled === false ? "Install Freighter" : "Connect Wallet"}
+    </Button>
   );
 }

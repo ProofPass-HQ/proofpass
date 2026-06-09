@@ -8,13 +8,13 @@ import { Pricing } from "@/components/pricing";
 import { Stats } from "@/components/stats";
 import { CTA } from "@/components/cta";
 import { Footer } from "@/components/footer";
-import { useAccount } from "wagmi";
+import { useWallet } from "@/providers/wallet-provider";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import sdk from "@farcaster/miniapp-sdk";
 
 export default function Home() {
-  const { address, isConnected } = useAccount();
+  const { isConnected, publicKey } = useWallet();
   const router = useRouter();
   const pathname = usePathname();
   const [isChecking, setIsChecking] = useState(true);
@@ -38,8 +38,8 @@ export default function Home() {
       }
 
       // If wallet is connected, store the address
-      if (isConnected && address) {
-        localStorage.setItem("walletAddress", address);
+      if (isConnected && publicKey) {
+        localStorage.setItem("walletAddress", publicKey);
       }
 
       // Check if user is authenticated (has wallet or FID)
@@ -58,7 +58,7 @@ export default function Home() {
     };
 
     checkAuthAndRedirect();
-  }, [isConnected, address, pathname, router]);
+  }, [isConnected, publicKey, pathname, router]);
 
   // Show loading spinner while checking authentication
   if (isChecking) {

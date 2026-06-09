@@ -1,5 +1,4 @@
 "use client";
-
 import {
   Card,
   CardContent,
@@ -19,64 +18,11 @@ import {
 import Link from "next/link";
 import { Badge } from "@/components/ui/badge";
 import { useEffect, useState } from "react";
-import { useAccount, useReadContract } from "wagmi";
+import { useWallet } from "@/providers/wallet-provider";
 import { sdk } from "@farcaster/miniapp-sdk";
 
-const ATTENDANCE_VERIFIER_ADDRESS = process.env
-  .NEXT_PUBLIC_ATTENDANCE_VERIFIER_ADDRESS as `0x${string}`;
-
-const ATTENDANCE_ABI = [
-  {
-    inputs: [{ name: "_attendee", type: "address" }],
-    name: "getAttendeeHistory",
-    outputs: [{ name: "", type: "uint256[]" }],
-    stateMutability: "view",
-    type: "function",
-  },
-  {
-    inputs: [
-      { name: "_eventId", type: "uint256" },
-      { name: "_attendee", type: "address" },
-    ],
-    name: "attendances",
-    outputs: [
-      { name: "eventId", type: "uint256" },
-      { name: "attendee", type: "address" },
-      { name: "timestamp", type: "uint256" },
-      { name: "verified", type: "bool" },
-    ],
-    stateMutability: "view",
-    type: "function",
-  },
-] as const;
-
-const EVENT_ABI = [
-  {
-    inputs: [{ name: "_eventId", type: "uint256" }],
-    name: "getEvent",
-    outputs: [
-      {
-        components: [
-          { name: "eventId", type: "uint256" },
-          { name: "organizer", type: "address" },
-          { name: "metadataHash", type: "string" },
-          { name: "createdAt", type: "uint256" },
-          { name: "attendanceFee", type: "uint256" },
-          { name: "isActive", type: "bool" },
-          { name: "maxAttendees", type: "uint256" },
-          { name: "currentAttendees", type: "uint256" },
-        ],
-        name: "",
-        type: "tuple",
-      },
-    ],
-    stateMutability: "view",
-    type: "function",
-  },
-] as const;
-
 export default function AttendeeDashboardView() {
-  const { address } = useAccount();
+  const { publicKey } = useWallet();
   const [attendedEvents, setAttendedEvents] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [fid, setFid] = useState<string | null>(null);
@@ -86,10 +32,8 @@ export default function AttendeeDashboardView() {
   useEffect(() => {
     const storedFid = localStorage.getItem("fid");
     const storedWallet = localStorage.getItem("farcasterWallet");
-
     if (storedFid) setFid(storedFid);
     if (storedWallet) setFarcasterWallet(storedWallet);
-
     sdk.context
       .then((ctx) => {
         if (ctx?.user?.fid) {
@@ -103,67 +47,63 @@ export default function AttendeeDashboardView() {
       });
   }, []);
 
-  // Get attendee history
-  const { data: eventIds } = useReadContract({
-    address: ATTENDANCE_VERIFIER_ADDRESS,
-    abi: ATTENDANCE_ABI,
-    functionName: "getAttendeeHistory",
-    args:
-      address || farcasterWallet
-        ? [(address || farcasterWallet) as `0x${string}`]
-        : undefined,
-    query: {
-      enabled: !!(address || farcasterWallet),
-    },
-  });
-
+  // Fetch attendance history from backend
   useEffect(() => {
+    const walletAddress = publicKey || farcasterWallet;
     const fetchEventDetails = async () => {
-      if (!eventIds || eventIds.length === 0) {
+      if (!walletAddress) {
         setIsLoading(false);
         return;
       }
-
-      const events = await Promise.all(
-        (eventIds as bigint[]).map(async (eventId) => {
-          try {
-            // Fetch event data
-            const eventResponse = await fetch(`/api/events/${eventId}`);
-            const eventData = await eventResponse.json();
-
-            // Fetch metadata
-            const metadataResponse = await fetch(
-              `/api/metadata/${eventData.metadataHash}`
-            );
-            const metadata = await metadataResponse.json();
-
-            // Fetch attendance data
-            const attendanceResponse = await fetch(
-              `/api/attendance/${eventId}/${address || farcasterWallet}`
-            );
-            const attendance = await attendanceResponse.json();
-
-            return {
-              id: eventId.toString(),
-              title: metadata.title,
-              date: new Date(Number(attendance.timestamp) * 1000),
-              location: metadata.location,
-              verified: attendance.verified,
-              nftMinted: true, // You can add NFT minting logic
-            };
-          } catch (error) {
-            console.error(`Error fetching event ${eventId}:`, error);
-            return null;
-          }
-        })
-      );
-
-      setAttendedEvents(events.filter(Boolean));
-      setIsLoading(false);
+      try {
+        const historyResponse = await fetch(
+          `/api/attendance/history/${walletAddress}`
+        );
+        if (!historyResponse.ok) {
+          setIsLoading(false);
+          return;
+        }
+        const eventIds: string[] = await historyResponse.json();
+        if (!eventIds || eventIds.length === 0) {
+          setIsLoading(false);
+          return;
+        }
+        const events = await Promise.all(
+          eventIds.map(async (eventId) => {
+            try {
+              const eventResponse = await fetch(`/api/events/${eventId}`);
+              const eventData = await eventResponse.json();
+              const metadataResponse = await fetch(
+                `/api/metadata/${eventData.metadataHash}`
+              );
+              const metadata = await metadataResponse.json();
+              const attendanceResponse = await fetch(
+                `/api/attendance/${eventId}/${walletAddress}`
+              );
+              const attendance = await attendanceResponse.json();
+              return {
+                id: eventId.toString(),
+                title: metadata.title,
+                date: new Date(Number(attendance.timestamp) * 1000),
+                location: metadata.location,
+                verified: attendance.verified,
+                nftMinted: true,
+              };
+            } catch (error) {
+              console.error(`Error fetching event ${eventId}:`, error);
+              return null;
+            }
+          })
+        );
+        setAttendedEvents(events.filter(Boolean));
+      } catch (error) {
+        console.error("Error fetching attendance history:", error);
+      } finally {
+        setIsLoading(false);
+      }
     };
-
     fetchEventDetails();
-  }, [eventIds, address, farcasterWallet]);
+  }, [publicKey, farcasterWallet]);
 
   // Calculate stats
   const thisMonthEvents = attendedEvents.filter((e: any) => {
@@ -206,9 +146,7 @@ export default function AttendeeDashboardView() {
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">
-              Events Attended
-            </CardTitle>
+            <CardTitle className="text-sm font-medium">Events Attended</CardTitle>
             <Calendar className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
@@ -216,12 +154,9 @@ export default function AttendeeDashboardView() {
             <p className="text-xs text-muted-foreground">All time</p>
           </CardContent>
         </Card>
-
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">
-              Verified Proofs
-            </CardTitle>
+            <CardTitle className="text-sm font-medium">Verified Proofs</CardTitle>
             <CheckCircle2 className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
@@ -231,12 +166,9 @@ export default function AttendeeDashboardView() {
             <p className="text-xs text-muted-foreground">On blockchain</p>
           </CardContent>
         </Card>
-
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">
-              NFTs Collected
-            </CardTitle>
+            <CardTitle className="text-sm font-medium">NFTs Collected</CardTitle>
             <Award className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
@@ -246,14 +178,13 @@ export default function AttendeeDashboardView() {
             <p className="text-xs text-muted-foreground">Unique badges</p>
           </CardContent>
         </Card>
-
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">This Month</CardTitle>
             <TrendingUp className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">1</div>
+            <div className="text-2xl font-bold">{thisMonthEvents}</div>
             <p className="text-xs text-muted-foreground">Events attended</p>
           </CardContent>
         </Card>
@@ -268,9 +199,7 @@ export default function AttendeeDashboardView() {
               <CardDescription>Your latest event check-ins</CardDescription>
             </div>
             <Link href="/dashboard/attendee/my-attendance">
-              <Button variant="ghost" size="sm">
-                View All
-              </Button>
+              <Button variant="ghost" size="sm">View All</Button>
             </Link>
           </div>
         </CardHeader>
@@ -286,11 +215,9 @@ export default function AttendeeDashboardView() {
                     {event.title.charAt(0)}
                   </div>
                   <div>
-                    <h3 className="font-semibold text-balance">
-                      {event.title}
-                    </h3>
+                    <h3 className="font-semibold text-balance">{event.title}</h3>
                     <p className="text-sm text-muted-foreground">
-                      {event.date.toLocaleDateString()} • {event.location}
+                      {event.date.toLocaleDateString()}  {event.location}
                     </p>
                   </div>
                 </div>
@@ -325,19 +252,15 @@ export default function AttendeeDashboardView() {
             </CardHeader>
           </Card>
         </Link>
-
         <Link href="/dashboard/attendee/my-attendance">
           <Card className="hover:shadow-lg transition-shadow cursor-pointer h-full">
             <CardHeader>
               <Calendar className="w-8 h-8 text-secondary mb-2" />
               <CardTitle>My Attendance</CardTitle>
-              <CardDescription>
-                View your complete attendance history
-              </CardDescription>
+              <CardDescription>View your complete attendance history</CardDescription>
             </CardHeader>
           </Card>
         </Link>
-
         <Link href="/dashboard/attendee/verify">
           <Card className="hover:shadow-lg transition-shadow cursor-pointer h-full">
             <CardHeader>
