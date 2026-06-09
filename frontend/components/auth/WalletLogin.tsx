@@ -1,7 +1,7 @@
 'use client';
-
 import React, { useState } from 'react';
-import { useAccount, useSignMessage } from 'wagmi';
+import { useWallet } from '@/providers/wallet-provider';
+import { signMessage } from '@stellar/freighter-api';
 import { Button } from '@/components/ui/button';
 import { Loader2 } from 'lucide-react';
 import { authApi } from '@/lib/api/auth';
@@ -9,72 +9,59 @@ import { useRouter } from 'next/navigation';
 import { useAuth } from '@/app/contexts/AuthContext';
 
 export function WalletLogin() {
-  const { address, isConnected } = useAccount();
-  const { signMessageAsync } = useSignMessage();
+  const { publicKey, isConnected, network } = useWallet();
   const { login } = useAuth();
   const router = useRouter();
-
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const handleLogin = async () => {
-    if (!address) {
+    if (!publicKey) {
       setError('Please connect your wallet first');
       return;
     }
-
     setIsLoading(true);
     setError(null);
-
     try {
-      console.log('🔐 Starting authentication for:', address);
-
       // Step 1: Get nonce from backend
-      console.log('📝 Requesting nonce from backend...');
-      const { nonce } = await authApi.getNonce(address);
-      console.log('✅ Nonce received:', nonce);
+      const { nonce } = await authApi.getNonce(publicKey);
 
       // Step 2: Create message to sign
-      const message = `Sign this message to authenticate with ProofPass.
+      const message = [
+        'Sign this message to authenticate with ProofPass.',
+        `Wallet: ${publicKey}`,
+        `Nonce: ${nonce}`,
+        'This request will not trigger a blockchain transaction or cost any gas fees.',
+      ].join('\n');
 
-Wallet: ${address}
-Nonce: ${nonce}
-
-This request will not trigger a blockchain transaction or cost any gas fees.`;
-
-      console.log('📝 Message to sign:', message);
-
-      // Step 3: Request signature from wallet
-      console.log('🖊️ Requesting signature from wallet...');
-      const signature = await signMessageAsync({ message });
-      console.log('✅ Signature received:', signature);
+      // Step 3: Request signature from Freighter
+      const networkPassphrase =
+        network === 'MAINNET'
+          ? 'Public Global Stellar Network ; September 2015'
+          : 'Test SDF Network ; September 2015';
+      const signResult = await signMessage(message, { networkPassphrase });
+      const signature = signResult.signedMessage;
 
       // Step 4: Verify signature with backend
-      console.log('🔍 Verifying signature with backend...');
       const { accessToken, user } = await authApi.verify({
-        walletAddress: address,
+        walletAddress: publicKey,
         signature,
         nonce,
       });
-      console.log('✅ Authentication successful!', user);
 
       // Step 5: Store token and user in context
       login(accessToken, user);
 
       // Step 6: Redirect to dashboard
-      console.log('🚀 Redirecting to dashboard...');
       router.push('/dashboard');
     } catch (err: any) {
-      console.error('❌ Authentication failed:', err);
-
-      // Handle different error types
-      if (err.code === 'ACTION_REJECTED' || err.code === 4001) {
+      if (err?.message?.includes('User declined') || err?.message?.includes('rejected')) {
         setError('Signature request was rejected. Please try again.');
       } else if (err.response?.status === 401) {
         setError('Authentication failed. Invalid signature.');
       } else if (err.response?.status === 400) {
         setError('Invalid wallet address format.');
-      } else if (err.code === 'NETWORK_ERROR' || !err.response) {
+      } else if (!err.response) {
         setError('Cannot connect to server. Please check if backend is running.');
       } else {
         setError(err.message || 'Authentication failed. Please try again.');
@@ -87,9 +74,7 @@ This request will not trigger a blockchain transaction or cost any gas fees.`;
   if (!isConnected) {
     return (
       <div>
-        <p>
-          Please connect your wallet using the button above to sign in.
-        </p>
+        <p>Please connect your wallet using the button above to sign in.</p>
       </div>
     );
   }
@@ -101,12 +86,10 @@ This request will not trigger a blockchain transaction or cost any gas fees.`;
           <p>{error}</p>
         </div>
       )}
-
       <div className="bg-gray-50 p-4 rounded-lg">
         <p className="text-sm text-gray-600 mb-2">Connected Wallet:</p>
-        <p className="font-mono text-sm font-semibold break-all">{address}</p>
+        <p className="font-mono text-sm font-semibold break-all">{publicKey}</p>
       </div>
-
       <Button
         onClick={handleLogin}
         disabled={isLoading}
@@ -122,7 +105,6 @@ This request will not trigger a blockchain transaction or cost any gas fees.`;
           'Sign Message to Login'
         )}
       </Button>
-
       <p className="text-xs text-gray-500 text-center">
         By signing, you agree to our Terms of Service. This is a free action and won't cost any gas.
       </p>

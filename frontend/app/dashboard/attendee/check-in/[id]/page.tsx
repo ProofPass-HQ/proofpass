@@ -18,77 +18,25 @@ import {
   Loader2,
   AlertCircle,
 } from "lucide-react";
-import { notFound, useRouter } from "next/navigation";
+import { useRouter } from "next/navigation";
 import { useState, useEffect } from "react";
 import { ConnectWalletButton } from "@/components/connect-wallet-button";
 import Link from "next/link";
-import {
-  useAccount,
-  useWriteContract,
-  useWaitForTransactionReceipt,
-  useReadContract,
-} from "wagmi";
-import { formatEther } from "viem";
+import { useWallet } from "@/providers/wallet-provider";
 import { toast } from "sonner";
 import { Header } from "@/components/header";
 import { sdk } from "@farcaster/miniapp-sdk";
 
-const ATTENDANCE_VERIFIER_ADDRESS = process.env
-  .NEXT_PUBLIC_ATTENDANCE_VERIFIER_ADDRESS as `0x${string}`;
-const EVENT_REGISTRY_ADDRESS = process.env
-  .NEXT_PUBLIC_EVENT_REGISTRY_ADDRESS as `0x${string}`;
-
-// Contract ABIs
-const ATTENDANCE_VERIFIER_ABI = [
-  {
-    inputs: [{ name: "_eventId", type: "uint256" }],
-    name: "checkIn",
-    outputs: [],
-    stateMutability: "payable",
-    type: "function",
-  },
-  {
-    inputs: [
-      { name: "_eventId", type: "uint256" },
-      { name: "_attendee", type: "address" },
-    ],
-    name: "verifyAttendance",
-    outputs: [{ name: "", type: "bool" }],
-    stateMutability: "view",
-    type: "function",
-  },
-] as const;
-
-const EVENT_REGISTRY_ABI = [
-  {
-    inputs: [{ name: "_eventId", type: "uint256" }],
-    name: "getEvent",
-    outputs: [
-      {
-        components: [
-          { name: "eventId", type: "uint256" },
-          { name: "organizer", type: "address" },
-          { name: "metadataHash", type: "string" },
-          { name: "createdAt", type: "uint256" },
-          { name: "attendanceFee", type: "uint256" },
-          { name: "isActive", type: "bool" },
-          { name: "maxAttendees", type: "uint256" },
-          { name: "currentAttendees", type: "uint256" },
-        ],
-        name: "",
-        type: "tuple",
-      },
-    ],
-    stateMutability: "view",
-    type: "function",
-  },
-] as const;
-
 export default function CheckInPage({ params }: { params: { id: string } }) {
   const router = useRouter();
-  const { address, isConnected } = useAccount();
+  const { publicKey, isConnected } = useWallet();
   const [checkedIn, setCheckedIn] = useState(false);
+  const [txHash, setTxHash] = useState<string | null>(null);
+  const [eventData, setEventData] = useState<any>(null);
   const [eventMetadata, setEventMetadata] = useState<any>(null);
+  const [eventLoading, setEventLoading] = useState(true);
+  const [alreadyCheckedIn, setAlreadyCheckedIn] = useState(false);
+  const [isCheckingIn, setIsCheckingIn] = useState(false);
   const [fid, setFid] = useState<string | null>(null);
   const [farcasterWallet, setFarcasterWallet] = useState<string | null>(null);
 
@@ -96,10 +44,8 @@ export default function CheckInPage({ params }: { params: { id: string } }) {
   useEffect(() => {
     const storedFid = localStorage.getItem("fid");
     const storedWallet = localStorage.getItem("farcasterWallet");
-
     if (storedFid) setFid(storedFid);
     if (storedWallet) setFarcasterWallet(storedWallet);
-
     sdk.context
       .then((ctx) => {
         if (ctx?.user?.fid) {
@@ -108,102 +54,65 @@ export default function CheckInPage({ params }: { params: { id: string } }) {
           localStorage.setItem("fid", fidString);
         }
       })
-      .catch(() => {
-        // Not in Farcaster app
-      });
+      .catch(() => {});
   }, []);
 
-  // Get event from blockchain
-  const { data: eventData, isLoading: eventLoading } = useReadContract({
-    address: EVENT_REGISTRY_ADDRESS,
-    abi: EVENT_REGISTRY_ABI,
-    functionName: "getEvent",
-    args: [BigInt(params.id)],
-  });
+  // Fetch event data from backend
+  useEffect(() => {
+    const fetchEvent = async () => {
+      try {
+        const response = await fetch(`/api/events/${params.id}`);
+        if (!response.ok) { setEventLoading(false); return; }
+        const data = await response.json();
+        setEventData(data);
+        if (data.metadataHash) {
+          const metaResponse = await fetch(`/api/metadata/${data.metadataHash}`);
+          const metadata = await metaResponse.json();
+          setEventMetadata(metadata);
+        }
+      } catch (error) {
+        console.error("Failed to fetch event:", error);
+      } finally {
+        setEventLoading(false);
+      }
+    };
+    fetchEvent();
+  }, [params.id]);
 
   // Check if user already checked in
-  const { data: alreadyCheckedIn } = useReadContract({
-    address: ATTENDANCE_VERIFIER_ADDRESS,
-    abi: ATTENDANCE_VERIFIER_ABI,
-    functionName: "verifyAttendance",
-    args: address ? [BigInt(params.id), address] : undefined,
-    query: {
-      enabled: !!address,
-    },
-  });
-
-  // Contract write for check-in
-  const {
-    writeContract,
-    data: txHash,
-    isPending: isCheckingIn,
-    error: checkInError,
-  } = useWriteContract();
-
-  // Wait for transaction
-  const { isLoading: isTxLoading, isSuccess: isTxSuccess } =
-    useWaitForTransactionReceipt({
-      hash: txHash,
-    });
-
-  // Fetch metadata from IPFS/backend
   useEffect(() => {
-    if (eventData) {
-      fetchEventMetadata(eventData.metadataHash);
-    }
-  }, [eventData]);
-
-  const fetchEventMetadata = async (hash: string) => {
-    try {
-      // Fetch from your metadata storage (IPFS, backend, etc.)
-      const response = await fetch(`/api/metadata/${hash}`);
-      const metadata = await response.json();
-      setEventMetadata(metadata);
-    } catch (error) {
-      console.error("Failed to fetch metadata:", error);
-    }
-  };
-
-  // Handle successful transaction
-  useEffect(() => {
-    if (isTxSuccess && txHash) {
-      setCheckedIn(true);
-      toast.success("Successfully checked in!");
-
-      // Auto-redirect after 3 seconds
-      const timer = setTimeout(() => {
-        router.push("/dashboard/attendee");
-      }, 3000);
-
-      return () => clearTimeout(timer);
-    }
-  }, [isTxSuccess, txHash, router]);
-
-  // Handle check-in errors
-  useEffect(() => {
-    if (checkInError) {
-      toast.error(checkInError.message || "Failed to check in");
-    }
-  }, [checkInError]);
+    const walletAddress = publicKey || farcasterWallet;
+    if (!walletAddress) return;
+    fetch(`/api/attendance/${params.id}/${walletAddress}`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => { if (data?.verified) setAlreadyCheckedIn(true); })
+      .catch(() => {});
+  }, [params.id, publicKey, farcasterWallet]);
 
   const handleCheckIn = async () => {
-    if (!eventData || !address) return;
-
+    const walletAddress = publicKey || farcasterWallet;
+    if (!eventData || !walletAddress) return;
+    setIsCheckingIn(true);
     try {
-      writeContract({
-        address: ATTENDANCE_VERIFIER_ADDRESS,
-        abi: ATTENDANCE_VERIFIER_ABI,
-        functionName: "checkIn",
-        args: [BigInt(params.id)],
-        value: eventData.attendanceFee,
+      const response = await fetch("/api/check-in", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ eventId: params.id, walletAddress }),
       });
+      if (!response.ok) throw new Error("Check-in failed");
+      const result = await response.json();
+      setTxHash(result.transactionHash ?? null);
+      setCheckedIn(true);
+      toast.success("Successfully checked in!");
+      setTimeout(() => router.push("/dashboard/attendee"), 3000);
     } catch (error: any) {
       console.error("Check-in error:", error);
       toast.error(error.message || "Failed to check in");
+    } finally {
+      setIsCheckingIn(false);
     }
   };
 
-  // Loading state
   if (eventLoading) {
     return (
       <div className="min-h-screen bg-background">
@@ -215,7 +124,6 @@ export default function CheckInPage({ params }: { params: { id: string } }) {
     );
   }
 
-  // Event not found
   if (!eventData) {
     return (
       <div className="min-h-screen bg-background">
@@ -240,11 +148,9 @@ export default function CheckInPage({ params }: { params: { id: string } }) {
     );
   }
 
-  const attendanceFee = formatEther(eventData.attendanceFee);
-  const isFree = eventData.attendanceFee === 0n;
+  const isFree = !eventData.attendanceFee || eventData.attendanceFee === "0";
   const isEventFull = eventData.currentAttendees >= eventData.maxAttendees;
 
-  // Success screen
   if (checkedIn) {
     return (
       <div className="min-h-screen bg-background">
@@ -255,49 +161,43 @@ export default function CheckInPage({ params }: { params: { id: string } }) {
               <CheckCircle className="w-20 h-20 mx-auto mb-4 text-green-500" />
               <CardTitle className="text-3xl">Check-In Successful!</CardTitle>
               <CardDescription>
-                You&apos;ve been verified on the blockchain
+                You&apos;ve been verified on the Stellar network
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-6">
               <div className="p-4 rounded-lg bg-accent/50">
-                <p className="text-sm font-medium text-muted-foreground mb-2">
-                  Event
-                </p>
+                <p className="text-sm font-medium text-muted-foreground mb-2">Event</p>
                 <p className="text-lg font-bold">
                   {eventMetadata?.title || `Event #${params.id}`}
                 </p>
               </div>
-
               <div className="p-4 rounded-lg bg-accent/50">
-                <p className="text-sm font-medium text-muted-foreground mb-2">
-                  Your Wallet
-                </p>
-                <p className="font-mono text-sm">{address}</p>
+                <p className="text-sm font-medium text-muted-foreground mb-2">Your Wallet</p>
+                <p className="font-mono text-sm">{publicKey || farcasterWallet}</p>
               </div>
-
-              <div className="p-4 rounded-lg bg-accent/50">
-                <p className="text-sm font-medium text-muted-foreground mb-2">
-                  Transaction Hash
-                </p>
-                <div className="flex items-center justify-between gap-2">
-                  <p className="font-mono text-xs truncate">{txHash}</p>
-                  <Button variant="ghost" size="sm" asChild>
-                    <Link
-                      href={`https://sepolia.basescan.org/tx/${txHash}`}
-                      target="_blank"
-                    >
-                      <ExternalLink className="w-4 h-4" />
-                    </Link>
-                  </Button>
+              {txHash && (
+                <div className="p-4 rounded-lg bg-accent/50">
+                  <p className="text-sm font-medium text-muted-foreground mb-2">
+                    Transaction Hash
+                  </p>
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="font-mono text-xs truncate">{txHash}</p>
+                    <Button variant="ghost" size="sm" asChild>
+                      <Link
+                        href={`https://stellar.expert/explorer/testnet/tx/${txHash}`}
+                        target="_blank"
+                      >
+                        <ExternalLink className="w-4 h-4" />
+                      </Link>
+                    </Button>
+                  </div>
                 </div>
-              </div>
-
+              )}
               <div className="p-4 rounded-lg bg-blue-500/10 border border-blue-500/20 text-center">
                 <p className="text-sm text-blue-600 dark:text-blue-400">
                   Redirecting to your dashboard in 3 seconds...
                 </p>
               </div>
-
               <div className="flex flex-col gap-3">
                 <Button
                   onClick={() => router.push("/dashboard/attendee")}
@@ -320,7 +220,6 @@ export default function CheckInPage({ params }: { params: { id: string } }) {
     );
   }
 
-  // Check-in screen
   return (
     <div className="min-h-screen bg-background">
       <Header />
@@ -341,9 +240,7 @@ export default function CheckInPage({ params }: { params: { id: string } }) {
               </Badge>
             </div>
           </CardHeader>
-
           <CardContent className="space-y-6">
-            {/* Event Details */}
             <div className="grid gap-4 md:grid-cols-2">
               <div className="flex items-center gap-3 p-3 rounded-lg bg-accent/50">
                 <Users className="w-5 h-5 text-primary" />
@@ -355,19 +252,17 @@ export default function CheckInPage({ params }: { params: { id: string } }) {
                   </p>
                 </div>
               </div>
-
               <div className="flex items-center gap-3 p-3 rounded-lg bg-accent/50">
                 <DollarSign className="w-5 h-5 text-primary" />
                 <div>
                   <p className="text-sm font-medium">Attendance Fee</p>
                   <p className="text-sm text-muted-foreground">
-                    {isFree ? "Free" : `${attendanceFee} ETH`}
+                    {isFree ? "Free" : `${eventData.attendanceFee} XLM`}
                   </p>
                 </div>
               </div>
             </div>
 
-            {/* Warnings */}
             {alreadyCheckedIn && (
               <div className="p-4 rounded-lg bg-yellow-500/10 border border-yellow-500/20">
                 <p className="text-sm text-yellow-600 dark:text-yellow-400">
@@ -375,7 +270,6 @@ export default function CheckInPage({ params }: { params: { id: string } }) {
                 </p>
               </div>
             )}
-
             {!eventData.isActive && (
               <div className="p-4 rounded-lg bg-red-500/10 border border-red-500/20">
                 <p className="text-sm text-red-600 dark:text-red-400">
@@ -383,7 +277,6 @@ export default function CheckInPage({ params }: { params: { id: string } }) {
                 </p>
               </div>
             )}
-
             {isEventFull && (
               <div className="p-4 rounded-lg bg-red-500/10 border border-red-500/20">
                 <p className="text-sm text-red-600 dark:text-red-400">
@@ -392,17 +285,14 @@ export default function CheckInPage({ params }: { params: { id: string } }) {
               </div>
             )}
 
-            {/* Check-in Section */}
             <div className="border-t pt-6">
               {!isConnected && !farcasterWallet ? (
                 <div className="text-center space-y-4">
                   <Wallet className="w-16 h-16 mx-auto text-primary" />
                   <div>
-                    <h3 className="text-xl font-bold mb-2">
-                      Connect Your Wallet
-                    </h3>
+                    <h3 className="text-xl font-bold mb-2">Connect Your Wallet</h3>
                     <p className="text-muted-foreground">
-                      Connect your wallet to check in to this event
+                      Connect your Freighter wallet to check in to this event
                     </p>
                   </div>
                   <div className="flex justify-center">
@@ -416,22 +306,17 @@ export default function CheckInPage({ params }: { params: { id: string } }) {
                       Connected Wallet
                     </p>
                     {fid && (
-                      <p className="text-xs text-primary mb-1">
-                        Farcaster FID: {fid}
-                      </p>
+                      <p className="text-xs text-primary mb-1">Farcaster FID: {fid}</p>
                     )}
                     <p className="text-sm font-mono w-full block sm:hidden">
-                      {address
-                        ? `${address.slice(0, 6)}...${address.slice(-4)}`
+                      {publicKey
+                        ? `${publicKey.slice(0, 6)}...${publicKey.slice(-4)}`
                         : farcasterWallet
-                        ? `${farcasterWallet.slice(
-                            0,
-                            6
-                          )}...${farcasterWallet.slice(-4)}`
+                        ? `${farcasterWallet.slice(0, 6)}...${farcasterWallet.slice(-4)}`
                         : "Not connected"}
                     </p>
                     <p className="text-sm font-mono w-full hidden sm:block">
-                      {address || farcasterWallet || "Not connected"}
+                      {publicKey || farcasterWallet || "Not connected"}
                     </p>
                   </div>
 
@@ -440,13 +325,9 @@ export default function CheckInPage({ params }: { params: { id: string } }) {
                       <div className="flex items-center justify-between">
                         <div>
                           <p className="font-medium">Attendance Fee</p>
-                          <p className="text-sm text-muted-foreground">
-                            Payment required
-                          </p>
+                          <p className="text-sm text-muted-foreground">Payment required</p>
                         </div>
-                        <p className="text-2xl font-bold">
-                          {attendanceFee} ETH
-                        </p>
+                        <p className="text-2xl font-bold">{eventData.attendanceFee} XLM</p>
                       </div>
                     </div>
                   )}
@@ -456,13 +337,12 @@ export default function CheckInPage({ params }: { params: { id: string } }) {
                     disabled={
                       !eventData.isActive ||
                       isEventFull ||
-                      Boolean(alreadyCheckedIn) === true ||
-                      isCheckingIn ||
-                      isTxLoading
+                      alreadyCheckedIn ||
+                      isCheckingIn
                     }
                     className="w-full gradient-emerald-teal text-white h-12 text-lg"
                   >
-                    {isCheckingIn || isTxLoading ? (
+                    {isCheckingIn ? (
                       <>
                         <Loader2 className="w-5 h-5 mr-2 animate-spin" />
                         Checking In...
@@ -478,8 +358,7 @@ export default function CheckInPage({ params }: { params: { id: string } }) {
                   </Button>
 
                   <p className="text-xs text-center text-muted-foreground">
-                    By checking in, you agree to have your attendance verified
-                    on the blockchain
+                    By checking in, you agree to have your attendance verified on the Stellar network
                   </p>
                 </div>
               )}
